@@ -1,0 +1,6 @@
+.telegram-config
+.copilot-daemon-state.json
+.copilot-daemon.lock
+.copilot-queue.json
+archive/
+*.log
