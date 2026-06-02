@@ -4,3 +4,4 @@
 .copilot-queue.json
 archive/
 *.log
+.copilot-prompt.tmp

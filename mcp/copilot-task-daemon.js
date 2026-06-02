@@ -316,12 +316,18 @@ function quoteForCmd(arg) {
   return `"${escaped}"`;
 }
 
+// Write prompt to a temp file in WORKDIR and pass @filename to copilot.
+// This avoids Windows command-line length limits (ENAMETOOLONG) when
+// skills + conversation context makes the prompt very large.
+const PROMPT_TMP = path.join(WORKDIR, '.copilot-prompt.tmp');
+
 function copilotRaw(prompt) {
   return new Promise((resolve) => {
-    // copilot -p "<prompt>" --effort high
-    const args   = ['-p', prompt, '--effort', 'high'];
-    const cmdLine = ['copilot', ...args.map(quoteForCmd)].join(' ');
-    log(`spawn: copilot -p [${prompt.slice(0, 80)}...]`);
+    try { fs.writeFileSync(PROMPT_TMP, prompt, 'utf-8'); } catch (e) {
+      return resolve({ code: -1, out: '', errOut: `writePrompt: ${e.message}`, killed: false });
+    }
+    const cmdLine = `copilot -p "@${PROMPT_TMP}"`;
+    log(`spawn: copilot -p @prompt.tmp (${prompt.length} chars)`);
     const proc = spawn(process.env.COMSPEC || 'cmd.exe',
       ['/d', '/s', '/c', cmdLine],
       { cwd: WORKDIR, windowsVerbatimArguments: true, env: { ...process.env } });
@@ -335,7 +341,11 @@ function copilotRaw(prompt) {
       try { proc.kill('SIGTERM'); } catch (_) {}
       setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} }, 5000);
     }, COPILOT_TIMEOUT_MS);
-    proc.on('close', code => { clearTimeout(timer); resolve({ code, out, errOut, killed }); });
+    proc.on('close', code => {
+      clearTimeout(timer);
+      try { fs.unlinkSync(PROMPT_TMP); } catch (_) {}
+      resolve({ code, out, errOut, killed });
+    });
   });
 }
 
