@@ -27,6 +27,103 @@ const LOCK_FILE   = path.join(WORKDIR, '.copilot-daemon.lock');
 const ARCHIVE_DIR = path.join(WORKDIR, 'archive');
 const DAILY_SUMMARIES_FILE = path.join(ARCHIVE_DIR, 'daily-summaries.json');
 
+// ---------- Skills (dynamic loader) ----------
+// Skills dir resolution (public-repo-safe — no hardcoded paths):
+//   1. config.skills_dir  (set in .telegram-config — gitignored)
+//   2. env var SKILLS_DIR
+//   3. ~/.claude/skills  (Hermes default)
+//   4. disabled (no skills injected)
+//
+// Each skill is a directory with a SKILL.md file containing YAML frontmatter:
+//   ---
+//   name: skill-name
+//   description: "TRIGGER when user mentions X / Y / Z ..."
+//   tags: [tag1, tag2]
+//   ---
+//
+// Dynamic matching: tokenise the user message, then score each skill by how many
+// description/tag tokens overlap. Inject the top-N matching skills as context.
+
+const SKILLS_TOP_N = 3; // max skills to inject per message
+
+function resolveSkillsDir(cfg) {
+  if (cfg.skills_dir && fs.existsSync(cfg.skills_dir)) return cfg.skills_dir;
+  if (process.env.SKILLS_DIR && fs.existsSync(process.env.SKILLS_DIR)) return process.env.SKILLS_DIR;
+  const home = process.env.USERPROFILE || process.env.HOME;
+  const def  = path.join(home, '.claude', 'skills');
+  if (fs.existsSync(def)) return def;
+  return null;
+}
+
+// Parse YAML frontmatter block (--- ... ---) from a SKILL.md string.
+// Returns { name, description, tags } or null.
+function parseFrontmatter(content) {
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return null;
+  const block = m[1];
+  const get = (key) => {
+    const r = block.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
+    return r ? r[1].trim().replace(/^['"]|['"]$/g, '') : '';
+  };
+  const tagsLine = block.match(/^tags:\s*\[([^\]]*)\]/m);
+  const tags = tagsLine ? tagsLine[1].split(',').map(t => t.trim().replace(/^['"]|['"]$/g, '')) : [];
+  return { name: get('name'), description: get('description'), tags };
+}
+
+// Load all skills from the skills dir: [{ name, description, tags, content, skillPath }]
+function loadAllSkills(skillsDir) {
+  if (!skillsDir) return [];
+  const skills = [];
+  let entries;
+  try { entries = fs.readdirSync(skillsDir); } catch { return []; }
+  for (const entry of entries) {
+    const skillMd = path.join(skillsDir, entry, 'SKILL.md');
+    if (!fs.existsSync(skillMd)) continue;
+    try {
+      const content = fs.readFileSync(skillMd, 'utf-8');
+      const fm = parseFrontmatter(content);
+      if (!fm) continue;
+      skills.push({ ...fm, content, skillPath: skillMd });
+    } catch { /* skip unreadable */ }
+  }
+  log(`skills: loaded ${skills.length} skills from ${skillsDir}`);
+  return skills;
+}
+
+// Score a skill against a user message. Returns a number (0 = no match).
+function scoreSkill(skill, message) {
+  const haystack = (skill.description + ' ' + skill.tags.join(' ')).toLowerCase();
+  // Extract meaningful tokens from the message (≥3 chars, ignore common words)
+  const STOPWORDS = new Set(['the','and','for','with','this','that','have','from','not','are','was','but','can','all']);
+  const tokens = message.toLowerCase()
+    .split(/[\s/,.()\[\]{}'"!?;:]+/)
+    .filter(t => t.length >= 3 && !STOPWORDS.has(t));
+  let score = 0;
+  for (const tok of tokens) {
+    if (haystack.includes(tok)) score += tok.length; // longer tokens = stronger signal
+  }
+  return score;
+}
+
+// Find the top-N most relevant skills for a given message.
+function matchSkills(skills, message, topN) {
+  const scored = skills
+    .map(s => ({ skill: s, score: scoreSkill(s, message) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topN);
+  return scored.map(x => x.skill);
+}
+
+// Build a context block from matched skills to prepend to the Copilot prompt.
+function buildSkillsContext(matchedSkills) {
+  if (!matchedSkills.length) return null;
+  const blocks = matchedSkills.map(s =>
+    `### Skill: ${s.name}\n${s.content}`
+  ).join('\n\n---\n\n');
+  return `[Relevant skills/procedures for this task — follow these instructions]\n\n${blocks}`;
+}
+
 const RECENT_TURNS   = 10;   // verbatim turns kept in context window
 const RECALL_DAYS_MAX = 365;
 
@@ -47,6 +144,10 @@ function loadConfig() {
   return cfg;
 }
 const config = loadConfig();
+
+// ---------- Skills boot ----------
+const SKILLS_DIR = resolveSkillsDir(config);
+const ALL_SKILLS = loadAllSkills(SKILLS_DIR);
 
 // ---------- State ----------
 let state = { updateOffset: 0, day: null };
@@ -331,8 +432,17 @@ async function handleMessage(rawText) {
     }
     taskText = `Using the recalled summaries above, briefly tell me what you remember from the last ${recallDays} day(s).`;
   } else {
-    // Always inject recent context so Copilot feels like a continuous conversation.
-    contextPrefix = await buildRestoreContext();
+    // Build context: [skills] + [conversation history]
+    const parts = [];
+    const matched = matchSkills(ALL_SKILLS, rawText, SKILLS_TOP_N);
+    if (matched.length) {
+      log(`skills matched: ${matched.map(s => s.name).join(', ')}`);
+      const sc = buildSkillsContext(matched);
+      if (sc) parts.push(sc);
+    }
+    const convCtx = await buildRestoreContext();
+    if (convCtx) parts.push(convCtx);
+    contextPrefix = parts.length ? parts.join('\n\n===\n\n') : undefined;
   }
 
   let result, ok;
