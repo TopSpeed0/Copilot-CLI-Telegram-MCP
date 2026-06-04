@@ -336,7 +336,7 @@ function copilotRaw(prompt) {
     try { fs.writeFileSync(PROMPT_TMP, prompt, 'utf-8'); } catch (e) {
       return resolve({ code: -1, out: '', errOut: `writePrompt: ${e.message}`, killed: false });
     }
-    const cmdLine = `copilot -p "@${PROMPT_TMP}"`;
+    const cmdLine = `copilot -p "@${PROMPT_TMP}" --yolo`;
     log(`spawn: copilot -p @prompt.tmp (${prompt.length} chars)`);
     const proc = spawn(process.env.COMSPEC || 'cmd.exe',
       ['/d', '/s', '/c', cmdLine],
