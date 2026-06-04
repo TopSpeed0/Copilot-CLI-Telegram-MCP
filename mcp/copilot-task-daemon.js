@@ -355,6 +355,7 @@ async function runCopilot(task, { contextPrefix } = {}) {
   if (killed) return { ok: false, text: `Task timed out after ${COPILOT_TIMEOUT_MS / 1000}s.\n${out.trim()}` };
   // Strip Copilot's trailing credits/stats line  ("AI Credits X.XX (Ys)\nTokens ...")
   const cleaned = stripAnsi(out)
+    .replace(/^Read [^\n]+\n\s+└[^\n]+\n?/gm, '')  // strip "Read <file>\n  └ N lines read"
     .replace(/\n?Changes\s+\+\d+ -\d+.*$/ms, '')
     .replace(/\n?AI Credits.*$/ms, '')
     .trim();

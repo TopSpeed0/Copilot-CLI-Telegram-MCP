@@ -1,2 +1,4 @@
-[copilot-daemon 2026-06-02T16:53:21.441Z] skills: loaded 16 skills from C:\Users\ybohadana\.claude\skills
-[copilot-daemon 2026-06-02T16:53:21.457Z] ready — workdir=C:\Users\ybohadana\OneDrive - COGNYTE\Documents\code\Cognyte\Copilot-MCP-CLI chat_id=783238524
+[copilot-daemon 2026-06-04T10:56:34.760Z] skills: loaded 16 skills from C:\Users\ybohadana\.claude\skills
+[copilot-daemon 2026-06-04T10:56:34.765Z] ready — workdir=C:\Users\ybohadana\OneDrive - COGNYTE\Documents\code\Cognyte\Copilot-MCP-CLI chat_id=783238524
+[copilot-daemon 2026-06-04T11:00:42.277Z] spawn: copilot -p @prompt.tmp (1037 chars)
+[copilot-daemon 2026-06-04T11:00:59.818Z] replied in 17.4s

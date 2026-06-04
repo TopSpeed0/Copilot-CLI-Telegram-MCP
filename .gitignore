@@ -5,3 +5,8 @@
 archive/
 *.log
 .copilot-prompt.tmp
+*.err
+*.out
+*.tmp
+*.bak
+*.error
