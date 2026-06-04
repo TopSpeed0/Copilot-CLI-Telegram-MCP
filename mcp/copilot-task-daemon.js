@@ -21,10 +21,20 @@ const path    = require('path');
 const https   = require('https');
 const { spawn } = require('child_process');
 
-const WORKDIR     = path.resolve(__dirname, '..');
-const STATE_FILE  = path.join(WORKDIR, '.copilot-daemon-state.json');
-const LOCK_FILE   = path.join(WORKDIR, '.copilot-daemon.lock');
-const ARCHIVE_DIR = path.join(WORKDIR, 'archive');
+const WORKDIR          = path.resolve(__dirname, '..');
+const STATE_FILE       = path.join(WORKDIR, '.copilot-daemon-state.json');
+const LOCK_FILE        = path.join(WORKDIR, '.copilot-daemon.lock');
+const ARCHIVE_DIR      = path.join(WORKDIR, 'archive');
+const SYSTEM_PROMPT_FILE = path.join(WORKDIR, 'system-prompt.md');
+
+function loadSystemPrompt() {
+  try {
+    const content = fs.readFileSync(SYSTEM_PROMPT_FILE, 'utf-8').trim();
+    if (content) { log(`system-prompt.md loaded (${content.length} chars)`); return content; }
+  } catch (_) {}
+  return null;
+}
+const SYSTEM_PROMPT = loadSystemPrompt();
 const DAILY_SUMMARIES_FILE = path.join(ARCHIVE_DIR, 'daily-summaries.json');
 
 // ---------- Skills (dynamic loader) ----------
@@ -355,7 +365,7 @@ async function runCopilot(task, { contextPrefix } = {}) {
   if (killed) return { ok: false, text: `Task timed out after ${COPILOT_TIMEOUT_MS / 1000}s.\n${out.trim()}` };
   // Strip Copilot's trailing credits/stats line  ("AI Credits X.XX (Ys)\nTokens ...")
   const cleaned = stripAnsi(out)
-    .replace(/^Read [^\n]+\n\s+└[^\n]+\n?/gm, '')  // strip "Read <file>\n  └ N lines read"
+    .replace(/^[●•]?\s*Read [^\n]+\n\s+└[^\n]+\n?/gm, '')  // strip "● Read <file>\n  └ N lines read"
     .replace(/\n?Changes\s+\+\d+ -\d+.*$/ms, '')
     .replace(/\n?AI Credits.*$/ms, '')
     .trim();
@@ -443,8 +453,9 @@ async function handleMessage(rawText) {
     }
     taskText = `Using the recalled summaries above, briefly tell me what you remember from the last ${recallDays} day(s).`;
   } else {
-    // Build context: [skills] + [conversation history]
+    // Build context: [system prompt] + [skills] + [conversation history]
     const parts = [];
+    if (SYSTEM_PROMPT) parts.push(`## System Instructions\n${SYSTEM_PROMPT}`);
     const matched = matchSkills(ALL_SKILLS, rawText, SKILLS_TOP_N);
     if (matched.length) {
       log(`skills matched: ${matched.map(s => s.name).join(', ')}`);

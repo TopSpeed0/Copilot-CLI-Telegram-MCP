@@ -1,4 +1,5 @@
 .telegram-config
+system-prompt.md
 .copilot-daemon-state.json
 .copilot-daemon.lock
 .copilot-queue.json
