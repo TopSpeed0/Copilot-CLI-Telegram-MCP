@@ -11,3 +11,4 @@ archive/
 *.tmp
 *.bak
 *.error
+*.err
