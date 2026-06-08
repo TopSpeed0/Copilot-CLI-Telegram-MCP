@@ -118,7 +118,7 @@ Hermes Agent — Overmind (always-on, owns Telegram)
 
 | Repo | Worker | Queue file | Best for |
 |------|--------|------------|----------|
-| [telegram-vscode-mcp](https://github.com/TopSpeed0/telegram-vscode-mcp) | VS Code Copilot Agent (v1 foundation) | `.vscode-queue.json` | VS Code-integrated workflows |
+| [AI-MCP-telegram-agents](https://github.com/TopSpeed0/AI-MCP-telegram-agents) | VS Code Copilot Agent (v1 foundation) | `.vscode-queue.json` | VS Code-integrated workflows |
 | **This repo** | Copilot CLI daemon | `.copilot-queue.json` | Generic tasks, any directory |
 | [ClaudeCodeTelgMCP](https://github.com/TopSpeed0/ClaudeCodeTelgMCP) | Claude Code daemon | `.claude-queue.json` | Heavy reasoning, workspace tools |
 
