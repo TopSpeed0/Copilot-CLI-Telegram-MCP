@@ -103,16 +103,32 @@ Override via `skills_dir` in `.telegram-config` or `SKILLS_DIR` env var.
 
 ## Hermes Overmind Integration
 
-This repo can be paired with [Hermes Agent](https://hermes-agent.nousresearch.com) as a two-tier AI system:
+This repo is part of a **three-worker architecture** with [Hermes Agent](https://hermes-agent.nousresearch.com/) as the Overmind:
 
-| Layer | Role |
-|-------|------|
-| **Hermes** (Telegram bot) | Overmind — receives user requests, handles simple tasks directly |
-| **Copilot** (daemon) | Worker — executes heavy workspace tasks, code, CLI commands |
+```
+You (Telegram)
+    │
+    ▼
+Hermes Agent — Overmind (always-on, owns Telegram)
+    ├── General tasks → handles directly
+    ├── Coding/generic tasks → .copilot-queue.json → Copilot CLI daemon (this repo)
+    └── Heavy/workspace tasks → .claude-queue.json → Claude Code daemon
+                                → TopSpeed0/ClaudeCodeTelgMCP
+```
 
-### How it works
+| Repo | Worker | Queue file | Best for |
+|------|--------|------------|----------|
+| [telegram-vscode-mcp](https://github.com/TopSpeed0/telegram-vscode-mcp) | VS Code Copilot Agent (v1 foundation) | `.vscode-queue.json` | VS Code-integrated workflows |
+| **This repo** | Copilot CLI daemon | `.copilot-queue.json` | Generic tasks, any directory |
+| [ClaudeCodeTelgMCP](https://github.com/TopSpeed0/ClaudeCodeTelgMCP) | Claude Code daemon | `.claude-queue.json` | Heavy reasoning, workspace tools |
 
-Hermes writes tasks to `.copilot-queue.json` in the repo root. The daemon polls it every 5 seconds, runs `copilot -p` with the task, and writes the result back. Hermes reads the result and reports to the user on Telegram. No bot-to-bot Telegram messaging needed.
+### Generic + Local design
+
+Each daemon works in **two modes simultaneously** — no config switch needed:
+- **Standalone**: receives Telegram messages directly → runs `copilot -p` → replies to Telegram
+- **Hermes worker**: polls `.copilot-queue.json` every 5s → picks up `pending` tasks → writes result back
+
+Hermes writes tasks to `.copilot-queue.json` in the repo root:
 
 ```json
 {
